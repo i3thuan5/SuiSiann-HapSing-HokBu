@@ -9,6 +9,7 @@ before_install:
 branches:
   only:
     - main
+    - cd
 jobs:
   include:
     - name: Check YAML format
@@ -36,3 +37,80 @@ jobs:
         - pip install tox
       script:
         - tox -e test
+    - stage: tsinghap
+      name: docker-compose tsiunnsuann
+      services:
+        - docker
+      before_script:
+        - export VIRTUAL_HOST=localhost
+        - export DEVICE=cpu
+        - export GUNICORN_WORKERS=1
+        - wget https://tongan-puntiunn.ithuan.tw/SuiSiann-HunLian/0.2.1-checkpoints.tgz
+        - tar -xzvf 0.2.1-checkpoints.tgz
+      script:
+        # 設定ZuGi
+        - git clone --depth 1 https://github.com/i3thuan5/ZuGi.git
+        - docker-compose -f ZuGi/docker-compose.yml up -d --build nginx-proxy
+        # 試docker-compose
+        - cat docker-compose.yaml | grep deploy
+        - sed '/deploy/,+6d' -i docker-compose.yaml
+        - sed '/healthcheck/,+5d' -i docker-compose.yaml
+        - docker-compose up -d --quiet-pull
+        # Check Nginx format
+        - docker-compose run --rm cache-nginx nginx -t
+        - docker-compose run --rm hokbu-nginx nginx -t
+        - sleep 10
+        - BANGTSI=http://localhost/bangtsam?taibun=ta%CC%8Dk-ke%20ts%C3%B2-hu%C3%A9%20l%C3%A2i%20tshit-th%C3%B4!
+        - time curl -L "$BANGTSI" --output siann.mp3
+        - file siann.mp3 | tee siann.type.txt
+        - cat siann.type.txt | grep 16
+        - time curl -L "$BANGTSI" -I
+        - time curl -L "$BANGTSI" -I
+        - curl --max-time 1 -L "$BANGTSI" -I
+        - docker-compose exec hapsing find /kiatko/ -type f -delete
+        - curl --max-time 1 -L "$BANGTSI" -I
+        - "curl --max-time 1 -L \"$BANGTSI\" -H 'range: bytes=0-' -I"
+      after_failure:
+        - docker-compose -f ZuGi/docker-compose.yml logs
+        - docker-compose logs
+        - cat siann.type.txt
+        - cat siann.mp3
+    - stage: deploy
+      name: deploy
+      if: (type = push or type = cron) and (branch = main or branch = cd)
+      install:
+        - pip install ansible
+      before_script:
+        - mkdir -p "${HOME}/.ssh/"
+        - TRAVIS_TSUKI_SSH_KEY_PATH="${HOME}/.ssh/id_ed25519_travis"
+        - echo "${DEPLOY_HOST} ssh-ed25519 ${DEPLOY_HOST_SSH_PUBLICKEY}" >> ${HOME}/.ssh/known_hosts
+        - echo "${DEPLOY_HOST_USER_SSH_KEY}" | base64 --decode > "${TRAVIS_TSUKI_SSH_KEY_PATH}"
+        # Recreate the certificate from the secure environment variable
+        - chmod 400 "${TRAVIS_TSUKI_SSH_KEY_PATH}"
+      script:
+        - '
+          ansible-playbook -i deploy/inventory_travis
+              deploy/deploy.yaml
+            --extra-vars "tsuanan_repo=`basename ${TRAVIS_REPO_SLUG}`"
+            --extra-vars "branch=${TRAVIS_BRANCH}"
+            --extra-vars "DEPLOY_HOST=${DEPLOY_HOST}"
+            --extra-vars "DEPLOY_HOST_USER=${DEPLOY_HOST_USER}"
+            --extra-vars "TRAVIS_TSUKI_SSH_KEY_PATH=${TRAVIS_TSUKI_SSH_KEY_PATH}"
+            --extra-vars "AWS_S3_ENDPOINT_URL=${AWS_S3_ENDPOINT_URL}"
+            --extra-vars "AWS_ACCESS_KEY_ID=${AWS_ACCESS_KEY_ID}"
+            --extra-vars "AWS_SECRET_ACCESS_KEY=${AWS_SECRET_ACCESS_KEY}"
+            --extra-vars "VIRTUAL_HOST=${VIRTUAL_HOST}"
+            --extra-vars "SENTRY_DSN=${SENTRY_DSN}"
+            --extra-vars "GUNICORN_TIMEOUT=${GUNICORN_TIMEOUT}"
+            --extra-vars "GUNICORN_WORKERS=${GUNICORN_WORKERS}"
+            --extra-vars "GUNICORN_MAX_REQUESTS=${GUNICORN_MAX_REQUESTS}"
+            --extra-vars "GUNICORN_MAX_REQUESTS_JITTER=${GUNICORN_MAX_REQUESTS_JITTER}"
+            --extra-vars "DEVICE=${DEVICE}"
+            --extra-vars "CUDA_VISIBLE_DEVICES=${CUDA_VISIBLE_DEVICES}"
+            --extra-vars "VOCODER=${VOCODER}"
+            --extra-vars "BATCHED=${BATCHED}"
+            --extra-vars "TARGET=${TARGET}"
+            --extra-vars "OVERLAP=${OVERLAP}"
+            --extra-vars "GL_ITERS=${GL_ITERS}"
+            # --extra-vars 其他 .env.template 變數
+          '
